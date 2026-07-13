@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+python-multipart
+google-generativeai
+opencv-python-headless
+numpy
+pillow
+faiss-cpu
+sentence-transformers
+easyocr
+segment-anything
+httpx

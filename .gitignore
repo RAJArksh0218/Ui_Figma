@@ -1,0 +1,30 @@
+# Python virtual environment
+backend/venv/
+.venv/
+env/
+__pycache__/
+*.pyc
+
+# Node modules
+frontend/node_modules/
+node_modules/
+
+# Environment variables (sensitive data)
+.env
+backend/.env
+frontend/.env
+
+# Large model files / weights (e.g., Segment Anything weights)
+backend/sam_vit_b_*.pth
+*.bin
+*.pt
+*.pth
+*.onnx
+
+# Build outputs
+frontend/dist/
+frontend/build/
+
+# IDE files
+.vscode/
+.DS_Store
