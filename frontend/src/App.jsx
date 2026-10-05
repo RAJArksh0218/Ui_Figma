@@ -21,10 +21,25 @@ function App() {
   const [selectedFile, setSelectedFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const [isUiLoading, setIsUiLoading] = useState(false);
+  const [isIngesting, setIsIngesting] = useState(false);
   const [activeUiTab, setActiveUiTab] = useState("sam"); // sam, ocr, colors, similarity, json, flutter, html
   const [uiStatus, setUiStatus] = useState("System Ready. Please upload a UI layout screenshot to begin.");
   const [uiPerformanceMetrics, setUiPerformanceMetrics] = useState(null); 
   
+  // Model Engine & Rationale State + Popup Modal Control
+  const [selectedModelEngine, setSelectedModelEngine] = useState("gemini-3.5-flash");
+  const [modelSelectionReason, setModelSelectionReason] = useState(
+    "Default configuration: Sub-second visual parsing and responsive DOM generation with Gemini 3.5 Flash."
+  );
+  const [isEngineModalOpen, setIsEngineModalOpen] = useState(false);
+
+  // Knowledge Base Modal States (3 Options)
+  const [isKnowledgeBaseOpen, setIsKnowledgeBaseOpen] = useState(false);
+  const [kbTab, setKbTab] = useState("zip"); // "zip" | "doc" | "github"
+  const [kbLoading, setKbLoading] = useState(false);
+  const [kbMessage, setKbMessage] = useState(null);
+  const [githubUrl, setGithubUrl] = useState("");
+
   // Real-time rendering tracker for pipeline steps (SAM to Code Synthesis)
   const [liveSteps, setLiveSteps] = useState([]);
 
@@ -36,6 +51,10 @@ function App() {
   const [uiJsonOutput, setUiJsonOutput] = useState("");
   const [uiFlutterOutput, setUiFlutterOutput] = useState("");
   const [uiHtmlOutput, setUiHtmlOutput] = useState("");
+  
+  // Visual alignment validation metrics
+  const [htmlRenderPreview, setHtmlRenderPreview] = useState("");
+  const [clipSimilarity, setClipSimilarity] = useState(null);
 
   // ==========================================
   // WORKSPACE B: FIGMA TO CODE STATES
@@ -70,9 +89,117 @@ function App() {
     return figmaPages.find((page) => page.id === activeFigmaPageId) || figmaPages[0];
   }, [figmaPages, activeFigmaPageId]);
 
+  const handleBulkIngest = async (e) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    setIsIngesting(true);
+    const formData = new FormData();
+    for (let i = 0; i < files.length; i++) { formData.append("files", files[i]); }
+    try {
+      const res = await axios.post("http://localhost:8000/api/ingest_folder", formData);
+      alert(`Ingestion Complete! Processed: ${res.data.details.processed} images.`);
+    } catch (err) {
+      alert("Error during folder ingestion.");
+    } finally {
+      setIsIngesting(false);
+    }
+  };
+
   const detectedPagesDebugJson = useMemo(() => {
     return JSON.stringify(figmaPages.map(createPageLevelJson), null, 2);
   }, [figmaPages]);
+
+  // ==========================================
+  // KNOWLEDGE BASE MODAL HANDLERS (3 OPTIONS)
+  // ==========================================
+  
+  // Option 1: Ingest ZIP file of images (Runs Steps 1 to 7)
+  const handleZipUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setKbLoading(true);
+    setKbMessage({ type: "info", text: `Unpacking ${file.name} & running Steps 1-7 for each image...` });
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const res = await axios.post("http://localhost:8000/api/kb/ingest_zip", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+        timeout: 600000
+      });
+      setKbMessage({
+        type: "success",
+        text: `✓ Successfully parsed & indexed ${res.data.details.processed} UI screens into ChromaDB (ui_components)!`
+      });
+    } catch (err) {
+      setKbMessage({
+        type: "error",
+        text: `Error ingesting ZIP: ${err.response?.data?.detail || err.message}`
+      });
+    } finally {
+      setKbLoading(false);
+    }
+  };
+
+  // Option 2: Ingest PDF or Excel/CSV document
+  const handleDocUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setKbLoading(true);
+    setKbMessage({ type: "info", text: `Extracting text and tables from ${file.name}...` });
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const res = await axios.post("http://localhost:8000/api/kb/ingest_doc", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+        timeout: 300000
+      });
+      setKbMessage({
+        type: "success",
+        text: `✓ Document indexed successfully: ${res.data.chunks_stored} chunks saved in ChromaDB (documents_kb)!`
+      });
+    } catch (err) {
+      setKbMessage({
+        type: "error",
+        text: `Error ingesting document: ${err.response?.data?.detail || err.message}`
+      });
+    } finally {
+      setKbLoading(false);
+    }
+  };
+
+  // Option 3: Ingest GitHub Repository Link
+  const handleGithubIngest = async (e) => {
+    e.preventDefault();
+    if (!githubUrl.trim()) {
+      alert("Please enter a valid GitHub repository URL.");
+      return;
+    }
+    setKbLoading(true);
+    setKbMessage({ type: "info", text: `Cloning ${githubUrl} and indexing code files...` });
+
+    try {
+      const res = await axios.post("http://localhost:8000/api/kb/ingest_github", {
+        repo_url: githubUrl.trim(),
+        branch: "main"
+      }, { timeout: 300000 });
+      setKbMessage({
+        type: "success",
+        text: `✓ Cloned repo! Indexed ${res.data.files_indexed} code files into ChromaDB (code_repo_kb)!`
+      });
+      setGithubUrl("");
+    } catch (err) {
+      setKbMessage({
+        type: "error",
+        text: `Error cloning repository: ${err.response?.data?.detail || err.message}`
+      });
+    } finally {
+      setKbLoading(false);
+    }
+  };
 
   // ==========================================
   // WORKSPACE A: SCREENSHOT PIPELINE LOGIC
@@ -89,6 +216,8 @@ function App() {
       setUiJsonOutput("");
       setUiFlutterOutput("");
       setUiHtmlOutput("");
+      setHtmlRenderPreview("");
+      setClipSimilarity(null);
       setUiPerformanceMetrics(null);
       setLiveSteps([]);
       setUiStatus("New image loaded. Click 'Run Code Engine Pipeline' to start processing.");
@@ -101,13 +230,12 @@ function App() {
     setUiPerformanceMetrics(null);
     setUiStatus("Executing Neural Pipeline...");
 
-    // Refactored Steps: Starts at SAM and ends at Code Synthesis
     const initialSteps = [
       { id: 1, name: "Layout Segmentation (SAM)", status: "processing", duration: null },
       { id: 2, name: "Text Extraction (OCR)", status: "waiting", duration: null },
       { id: 3, name: "Element Color Profiling", status: "waiting", duration: null },
       { id: 4, name: "Dynamic Memory Search (FAISS)", status: "waiting", duration: null },
-      { id: 5, name: "UI Blueprint Synthesis", status: "waiting", duration: null },
+      { id: 5, name: "Visual Alignment Check (CLIP)", status: "waiting", duration: null },
       { id: 6, name: "Code Synthesis (HTML/Flutter)", status: "waiting", duration: null },
     ];
     setLiveSteps(initialSteps);
@@ -148,26 +276,38 @@ function App() {
 
       clearInterval(interval);
       
-      // Multi-key mapping to handle flexible backend schemas
       setUiStatus(res.data.status || "Pipeline Execution Completed");
       setUiJsonOutput(res.data.json || res.data.ui_json || "");
       setUiFlutterOutput(res.data.flutter || res.data.flutter_code || res.data.flutterOutput || "");
       setUiHtmlOutput(res.data.html || res.data.html_code || res.data.html_css || res.data.htmlCssOutput || "");
       setSamPreview(res.data.sam_preview ? `data:image/png;base64,${res.data.sam_preview}` : "");
-      setOcrOutput(res.data.ocr_text || res.data.ocrText || null);
+      
+      const extractedOcr = res.data.ocr_text || res.data.ocrText || null;
+      setOcrOutput(extractedOcr);
       setColorsOutput(res.data.colors || []);
-      setSimilarityOutput(res.data.similarity || res.data.similarity_logs || res.data.similarityLogs || res.data.faiss_status || "No log generated.");
+      setSimilarityOutput(res.data.similarity || res.data.similarity_logs || res.data.similarityLogs || "No log generated.");
+      
+      // Update System Engine and Reasoning from backend
+      if (res.data.model_engine) {
+        setSelectedModelEngine(res.data.model_engine);
+        setModelSelectionReason(res.data.model_reason || "Automated routing determined by backend inference manager.");
+      }
 
-      // Extract accurate steps, skipping the preprocessing step
+      // Load reconstructed previews and CLIP alignment scores
+      setHtmlRenderPreview(res.data.html_render_preview ? `data:image/png;base64,${res.data.html_render_preview}` : "");
+      setClipSimilarity(res.data.clip_similarity !== undefined ? res.data.clip_similarity : null);
+
       if (res.data.performance_metrics) {
-        const filteredSteps = res.data.performance_metrics.steps.filter(step => step.step_id !== 1);
-        const accurateSteps = filteredSteps.map((step, index) => ({
-          id: index + 1, // Normalized to Steps 1 - 6
-          name: step.name,
-          status: "completed",
-          duration: `${step.duration_sec}s`,
-        }));
-        setLiveSteps(accurateSteps);
+        const backendSteps = res.data.performance_metrics.steps;
+        const mappedSteps = initialSteps.map((step, idx) => {
+           const correspondingStage = backendSteps.find(s => s.stage === idx + 1);
+           return {
+             ...step,
+             status: "completed",
+             duration: correspondingStage ? `${correspondingStage.duration}s` : "0.5s"
+           };
+        });
+        setLiveSteps(mappedSteps);
         setUiPerformanceMetrics(res.data.performance_metrics);
       }
 
@@ -198,7 +338,7 @@ function App() {
 
   const setFigmaCodeCache = (val) => {
     setFigmaAiCodeCache(val);
-  }
+  };
 
   useEffect(() => {
     if (!activeFigmaPage) {
@@ -255,7 +395,6 @@ function App() {
       setStep1Status("ready");
       setStep1Message("Figma JSON loaded & auto-parsed!");
 
-      // AUTO-PARSE UPGRADE: Trigger automatic paste parsing
       handlePastedJsonChange(stringified);
     } catch (error) {
       setStep1Status("error");
@@ -288,7 +427,6 @@ function App() {
         setActiveFigmaPageId(foundPages[0].id);
       }
 
-      // Automatically trigger backend asset extraction
       const processed = await extractImageAssetsForFigmaJson(parsed);
       setFigmaJson(processed);
     } catch (err) {
@@ -377,7 +515,23 @@ function App() {
     }
   };
 
-  // Common Helpers
+  const [ingestProgress, setIngestProgress] = useState({ current_file: "", processed: 0, total: 0 });
+
+  useEffect(() => {
+    let interval;
+    if (isIngesting) {
+      interval = setInterval(async () => {
+        try {
+          const res = await axios.get("http://localhost:8000/api/ingestion_status");
+          setIngestProgress(res.data);
+        } catch (e) {
+          console.error("Polling error", e);
+        }
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [isIngesting]);
+
   const copyToClipboard = (text) => {
     if (!text) return;
     navigator.clipboard.writeText(text);
@@ -419,50 +573,69 @@ function App() {
           WORKSPACE 1: SCREENSHOT TO CODE RAG PIPELINE
           ======================================================= */}
       {workspace === "screenshot" && (
-        <main className="workspace-grid">
-          {/* Left Control Panel */}
-          <section className="panel control-panel">
-            <div className="panel-header">
+        <main className="workspace-grid" style={{ gridTemplateColumns: "420px 1fr" }}>
+          
+          {/* LEFT CONTROL PANEL */}
+          <section className="panel control-panel" style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
+            <div className="panel-header" style={{ flexShrink: 0 }}>
               <h2>Source UI Control Panel</h2>
             </div>
-            <div className="panel-body">
-              <div className="upload-wrapper">
-                <label className="file-upload-label">
-                  <input type="file" accept="image/*" onChange={handleUiFileChange} />
-                  <div className="upload-box-content">
-                    <span className="upload-icon">📁</span>
-                    <span>Click to Upload UI Screenshot</span>
-                  </div>
-                </label>
-              </div>
-
-              {imagePreview && (
-                <div className="source-preview-container">
-                  <h4>Uploaded Input Image:</h4>
-                  <img src={imagePreview} alt="Uploaded interface" className="source-img" />
-                </div>
-              )}
-
+            
+            {/* Scrollable Container Body Wrapper */}
+            <div className="panel-body" style={{ flex: 1, overflowY: "auto", padding: "16px", display: "flex", flexDirection: "column", gap: "14px" }}>
+              
+              {/* KNOWLEDGE BASE MODAL TRIGGER BUTTON (TOP OF CONTROL PANEL) */}
               <button
-                onClick={handleProcessUiPipeline}
-                disabled={isUiLoading || !selectedFile}
-                className={`process-button ${isUiLoading ? "btn-loading" : ""}`}
+                onClick={() => {
+                  setIsKnowledgeBaseOpen(true);
+                  setKbMessage(null);
+                }}
+                style={{
+                  width: "100%",
+                  padding: "10px 14px",
+                  background: "linear-gradient(135deg, #1e293b, #0f172a)",
+                  border: "1px solid #38bdf8",
+                  borderRadius: "6px",
+                  color: "#38bdf8",
+                  fontSize: "12px",
+                  fontWeight: "bold",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  boxShadow: "0 4px 12px rgba(0, 0, 0, 0.3)",
+                  flexShrink: 0
+                }}
               >
-                {isUiLoading ? "Running Pipeline Engine..." : "Run Code Engine Pipeline"}
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span>📚</span>
+                  <span>Ingest Knowledge Base (ZIP / Doc / Git)</span>
+                </div>
+                <span style={{ 
+                  background: uiJsonOutput ? "#10b98125" : "#64748b25", 
+                  color: uiJsonOutput ? "#34d399" : "#94a3b8", 
+                  border: `1px solid ${uiJsonOutput ? "#10b981" : "#475569"}`,
+                  padding: "2px 6px", 
+                  borderRadius: "4px", 
+                  fontSize: "10px" 
+                }}>
+                  {uiJsonOutput ? "Ready" : "Active"}
+                </span>
               </button>
 
-              {/* Enhanced terminal output box with forced vertical scrollbars */}
+              {/* Terminal Log Container */}
               <div 
                 className="terminal-log" 
                 style={{ 
                   display: "flex", 
                   flexDirection: "column", 
-                  height: "190px", 
+                  height: "330px", 
                   border: "1px solid #334155", 
-                  borderRadius: "6px", 
-                  backgroundColor: "#0f172a", 
+                  borderRadius: "8px", 
+                  backgroundColor: "#0b1329", 
+                  boxShadow: "0 8px 24px rgba(0, 0, 0, 0.45)",
                   overflow: "hidden",
-                  marginTop: "15px"
+                  flexShrink: 0
                 }}
               >
                 {/* Fixed Top Header */}
@@ -471,15 +644,33 @@ function App() {
                   style={{ 
                     display: "flex", 
                     alignItems: "center", 
-                    padding: "8px 12px", 
+                    justifyContent: "space-between",
+                    padding: "10px 14px", 
                     backgroundColor: "#1e293b", 
-                    borderBottom: "1px solid #334155" 
+                    borderBottom: "1px solid #334155",
+                    flexShrink: 0
                   }}
                 >
-                  <span className="term-dot red" style={{ width: "8px", height: "8px", borderRadius: "50%", backgroundColor: "#ef4444", marginRight: "6px" }}></span>
-                  <span className="term-dot yellow" style={{ width: "8px", height: "8px", borderRadius: "50%", backgroundColor: "#f59e0b", marginRight: "6px" }}></span>
-                  <span className="term-dot green" style={{ width: "8px", height: "8px", borderRadius: "50%", backgroundColor: "#10b981", marginRight: "10px" }}></span>
-                  <span className="term-title" style={{ color: "#94a3b8", fontSize: "10px", fontFamily: "monospace", textTransform: "uppercase", letterSpacing: "0.5px" }}>system-logs</span>
+                  <div style={{ display: "flex", alignItems: "center" }}>
+                    <span className="term-dot red" style={{ width: "8px", height: "8px", borderRadius: "50%", backgroundColor: "#ef4444", marginRight: "6px" }}></span>
+                    <span className="term-dot yellow" style={{ width: "8px", height: "8px", borderRadius: "50%", backgroundColor: "#f59e0b", marginRight: "6px" }}></span>
+                    <span className="term-dot green" style={{ width: "8px", height: "8px", borderRadius: "50%", backgroundColor: "#10b981", marginRight: "10px" }}></span>
+                    <span className="term-title" style={{ color: "#cbd5e1", fontSize: "11px", fontWeight: "bold", fontFamily: "monospace", textTransform: "uppercase", letterSpacing: "0.8px" }}>
+                      SYSTEM LOGS & PIPELINE TELEMETRY
+                    </span>
+                  </div>
+
+                  <span style={{ 
+                    fontSize: "9px", 
+                    background: "#0284c7", 
+                    color: "#ffffff", 
+                    padding: "2px 7px", 
+                    borderRadius: "4px", 
+                    fontWeight: "600", 
+                    fontFamily: "monospace" 
+                  }}>
+                    LIVE STREAM
+                  </span>
                 </div>
 
                 {/* Scrollable Container Body */}
@@ -487,36 +678,39 @@ function App() {
                   className="terminal-body" 
                   style={{ 
                     flex: 1, 
-                    overflowY: "scroll", 
-                    padding: "10px", 
+                    overflowY: "auto", 
+                    padding: "12px 14px", 
                     fontFamily: "monospace", 
-                    lineHeight: "1.4"
+                    lineHeight: "1.45"
                   }}
                 >
-                  <p className="log-text" style={{ color: "#38bdf8", fontWeight: "bold", margin: "0 0 8px 0", fontSize: "11px" }}>
-                    {uiStatus}
-                  </p>
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: "8px", margin: "0 0 10px 0" }}>
+                    <span style={{ color: "#38bdf8", fontSize: "12px" }}>❯</span>
+                    <p className="log-text" style={{ color: "#38bdf8", fontWeight: "600", margin: 0, fontSize: "11.5px" }}>
+                      {uiStatus}
+                    </p>
+                  </div>
                   
                   {/* Step Logs */}
                   {liveSteps.length > 0 && (
-                    <div className="metrics-profiler" style={{ borderTop: "1px solid #334155", paddingTop: "6px" }}>
-                      <div style={{ color: "#94a3b8", fontSize: "10px", marginBottom: "6px", letterSpacing: "0.5px" }}>
-                        PIPELINE EXECUTION STATUS:
+                    <div className="metrics-profiler" style={{ borderTop: "1px solid #1e293b", paddingTop: "8px" }}>
+                      <div style={{ color: "#94a3b8", fontSize: "10px", marginBottom: "8px", letterSpacing: "0.6px", fontWeight: "bold" }}>
+                        PIPELINE EXECUTION STAGES:
                       </div>
                       
                       {liveSteps.map((step) => {
-                        let stepColor = "#64748b"; // waiting
+                        let stepColor = "#64748b";
                         let statusMarker = "waiting";
                         
                         if (step.status === "completed") {
-                          stepColor = "#34d399"; // Success
-                          statusMarker = step.duration;
+                          stepColor = "#34d399";
+                          statusMarker = `✓ ${step.duration}`;
                         } else if (step.status === "processing") {
-                          stepColor = "#fbbf24"; // Running
+                          stepColor = "#fbbf24";
                           statusMarker = "processing...";
                         } else if (step.status === "failed") {
-                          stepColor = "#f87171"; // Error
-                          statusMarker = "failed";
+                          stepColor = "#f87171";
+                          statusMarker = "✗ failed";
                         }
 
                         return (
@@ -526,15 +720,94 @@ function App() {
                               display: "flex", 
                               justifyContent: "space-between", 
                               fontSize: "11px", 
-                              margin: "4px 0", 
+                              margin: "5px 0", 
                               color: stepColor
                             }}
                           >
-                            <span>Step {step.id}: {step.name}</span>
-                            <span>{statusMarker}</span>
+                            <span>Stage {step.id}: {step.name}</span>
+                            <span style={{ fontWeight: "600" }}>{statusMarker}</span>
                           </div>
                         );
                       })}
+
+                      {/* SYSTEM ENGINE BAR WITH POPUP TRIGGER */}
+                      <div 
+                        style={{ 
+                          marginTop: "12px", 
+                          padding: "10px", 
+                          backgroundColor: "#111c38", 
+                          borderRadius: "6px", 
+                          border: "1px solid #1e293b",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "6px"
+                        }}
+                      >
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <span style={{ color: "#94a3b8", fontSize: "10.5px", fontWeight: "bold" }}>SYNTHESIS ENGINE:</span>
+                          
+                          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                            <span style={{ 
+                              color: "#38bdf8", 
+                              backgroundColor: "#0369a120", 
+                              border: "1px solid #0284c7",
+                              padding: "2px 8px",
+                              borderRadius: "4px",
+                              fontWeight: "bold", 
+                              fontSize: "11px", 
+                              fontFamily: "monospace" 
+                            }}>
+                              {selectedModelEngine}
+                            </span>
+                            
+                            {/* POPUP TRIGGER BUTTON */}
+                            <button
+                              onClick={() => setIsEngineModalOpen(true)}
+                              style={{
+                                background: "#0284c7",
+                                color: "#ffffff",
+                                border: "none",
+                                borderRadius: "4px",
+                                padding: "2px 6px",
+                                fontSize: "10px",
+                                fontWeight: "bold",
+                                cursor: "pointer"
+                              }}
+                              title="Click to view full Engine details"
+                            >
+                              🔍 View
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Short Selection Reason display */}
+                        <div style={{ borderTop: "1px dashed #1e293b", paddingTop: "6px", marginTop: "2px" }}>
+                          <span style={{ color: "#f59e0b", fontSize: "10px", fontWeight: "bold", display: "block", marginBottom: "3px" }}>
+                            SELECTION REASON & CONTEXT:
+                          </span>
+                          <p style={{ color: "#cbd5e1", fontSize: "10.5px", lineHeight: "1.4", margin: 0 }}>
+                            {modelSelectionReason}
+                          </p>
+                        </div>
+                      </div>
+                      
+                      {isIngesting && (
+                        <div className="ingestion-overlay" style={{ marginTop: "10px", padding: "10px", border: "1px dashed #475569", borderRadius: "4px" }}>
+                          <div className="progress-card">
+                            <span style={{ color: "#38bdf8", fontSize: "11px" }}>Processing Folder...</span>
+                            <div style={{ fontSize: "10px", color: "#94a3b8" }}>
+                              Current File: <strong>{ingestProgress.current_file}</strong>
+                            </div>
+                            <div className="progress-bar-bg" style={{ width: "100%", height: "4px", background: "#334155", borderRadius: "2px", margin: "4px 0" }}>
+                              <div 
+                                className="progress-bar-fill" 
+                                style={{ width: `${(ingestProgress.processed / (ingestProgress.total || 1)) * 100}%`, height: "4px", background: "#10b981", borderRadius: "2px" }}
+                              ></div>
+                            </div>
+                            <span style={{ fontSize: "10px", color: "#94a3b8" }}>{ingestProgress.processed} / {ingestProgress.total} processed.</span>
+                          </div>
+                        </div>
+                      )}
 
                       {uiPerformanceMetrics && !isUiLoading && (
                         <div 
@@ -542,9 +815,9 @@ function App() {
                             display: "flex", 
                             justifyContent: "space-between", 
                             fontSize: "11px", 
-                            margin: "8px 0 0 0", 
-                            borderTop: "1px dashed #475569", 
-                            paddingTop: "6px", 
+                            margin: "10px 0 0 0", 
+                            borderTop: "1px dashed #334155", 
+                            paddingTop: "8px", 
                             fontWeight: "bold",
                             color: "#60a5fa"
                           }}
@@ -556,6 +829,39 @@ function App() {
                     </div>
                   )}
                 </div>
+              </div>
+
+              <div className="upload-wrapper" style={{ flexShrink: 0 }}>
+                <label className="file-upload-label">
+                  <input type="file" accept="image/*" onChange={handleUiFileChange} />
+                  <div className="upload-box-content">
+                    <span className="upload-icon">📁</span>
+                    <span>Click to Upload UI Screenshot</span>
+                  </div>
+                </label>
+              </div>
+
+              {imagePreview && (
+                <div className="source-preview-container" style={{ flexShrink: 0 }}>
+                  <h4>Uploaded Input Image:</h4>
+                  <img src={imagePreview} alt="Uploaded interface" className="source-img" style={{ maxHeight: "220px", objectFit: "contain" }} />
+                </div>
+              )}
+
+              <button
+                onClick={handleProcessUiPipeline}
+                disabled={isUiLoading || !selectedFile}
+                className={`process-button ${isUiLoading ? "btn-loading" : ""}`}
+                style={{ flexShrink: 0 }}
+              >
+                {isUiLoading ? "Running Pipeline Engine..." : "Run Code Engine Pipeline"}
+              </button>
+
+              <div style={{ borderTop: "1px solid #334155", paddingTop: "15px", flexShrink: 0 }}>
+                <label style={{ cursor: "pointer", background: "#1e293b", padding: "10px", display: "block", textAlign: "center", borderRadius: "6px", color: "white" }}>
+                  <input type="file" multiple="multiple" webkitdirectory="true" directory="true" onChange={handleBulkIngest} style={{ display: "none" }} />
+                  📂 {isIngesting ? "Ingesting Folder..." : "Bulk Ingest UI Folder"}
+                </label>
               </div>
             </div>
           </section>
@@ -630,24 +936,91 @@ function App() {
               )}
 
               {activeUiTab === "similarity" && (
-                <div className="viewport-content centered-flex" style={{ overflowY: "auto" }}>
+                <div className="viewport-content" style={{ overflow: "auto", height: "100%", padding: "20px" }}>
                   {similarityOutput ? (
-                    <div className="similarity-card" style={{ width: "90%", maxWidth: "800px", margin: "20px auto", textAlign: "left" }}>
-                      <span className="similarity-icon-big" style={{ display: "block", margin: "0 auto 15px auto" }}></span>
-                      <h3 style={{ textAlign: "center", marginBottom: "15px" }}>Vector Search Matching Log</h3>
-                      <pre style={{ 
-                        backgroundColor: "#0f172a", 
-                        padding: "15px", 
-                        borderRadius: "6px", 
-                        border: "1px solid #334155", 
-                        color: "#38bdf8", 
-                        fontFamily: "monospace", 
-                        fontSize: "12px", 
-                        lineHeight: "1.5", 
-                        whiteSpace: "pre-wrap" 
-                      }}>
-                        <code>{similarityOutput}</code>
-                      </pre>
+                    <div className="similarity-container" style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+                      
+                      {/* CLIP Similarity Score Progress Tracker */}
+                      {clipSimilarity !== null && (
+                        <div className="visual-alignment-metrics" style={{
+                          background: "#1e293b",
+                          border: "1px solid #334155",
+                          borderRadius: "8px",
+                          padding: "20px",
+                          textAlign: "center"
+                        }}>
+                          <h3 style={{ margin: "0 0 10px 0", color: "#f8fafc", fontSize: "16px" }}>Reconstruction Metrics</h3>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "15px" }}>
+                            <div className="progress-circle-indicator" style={{
+                              position: "relative",
+                              width: "120px",
+                              height: "120px",
+                              borderRadius: "50%",
+                              background: `conic-gradient(#10b981 ${clipSimilarity * 3.6}deg, #334155 0deg)`,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center"
+                            }}>
+                              <div style={{
+                                width: "100px",
+                                height: "100px",
+                                borderRadius: "50%",
+                                background: "#1e293b",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                flexDirection: "column"
+                              }}>
+                                <span style={{ color: "#34d399", fontSize: "24px", fontWeight: "bold" }}>{clipSimilarity}%</span>
+                                <span style={{ color: "#94a3b8", fontSize: "9px", textTransform: "uppercase" }}>CLIP Match</span>
+                              </div>
+                            </div>
+                            
+                            <div style={{ textAlign: "left" }}>
+                              <h4 style={{ color: "#38bdf8", margin: "0 0 5px 0" }}>CLIP Semantic Verification</h4>
+                              <p style={{ color: "#94a3b8", fontSize: "12px", margin: "0", maxWidth: "400px" }}>
+                                Evaluates structural similarities and color themes between original source inputs and compiled HTML outputs.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Render Visual Comparison Side-by-Side */}
+                      {htmlRenderPreview && imagePreview && (
+                        <div className="visual-side-by-side" style={{
+                          display: "grid",
+                          gridTemplateColumns: "1fr 1fr",
+                          gap: "15px",
+                        }}>
+                          <div style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: "8px", padding: "10px" }}>
+                            <h4 style={{ color: "#94a3b8", margin: "0 0 8px 0", textAlign: "center", fontSize: "12px" }}>ORIGINAL INPUT VIEW</h4>
+                            <img src={imagePreview} alt="Original input mockup" style={{ width: "100%", height: "auto", maxHeight: "400px", objectFit: "contain", borderRadius: "4px" }} />
+                          </div>
+                          
+                          <div style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: "8px", padding: "10px" }}>
+                            <h4 style={{ color: "#94a3b8", margin: "0 0 8px 0", textAlign: "center", fontSize: "12px" }}>HTML OUTPUT RENDER</h4>
+                            <img src={htmlRenderPreview} alt="Rendered HTML preview mockup" style={{ width: "100%", height: "auto", maxHeight: "400px", objectFit: "contain", borderRadius: "4px" }} />
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="similarity-card" style={{ width: "100%" }}>
+                        <h3 style={{ marginBottom: "15px", color: "#f8fafc", fontSize: "14px" }}>Vector Search Matching Log</h3>
+                        <pre style={{ 
+                          backgroundColor: "#0f172a", 
+                          padding: "15px", 
+                          borderRadius: "6px", 
+                          border: "1px solid #334155", 
+                          color: "#38bdf8", 
+                          fontFamily: "monospace", 
+                          fontSize: "12px", 
+                          lineHeight: "1.5", 
+                          whiteSpace: "pre-wrap" 
+                        }}>
+                          <code>{similarityOutput}</code>
+                        </pre>
+                      </div>
                     </div>
                   ) : (
                     <div className="empty-state">
@@ -906,6 +1279,371 @@ function App() {
             </div>
           </div>
 
+        </div>
+      )}
+
+      {/* =======================================================
+          MODAL 1: KNOWLEDGE BASE INGESTION (3 DISTINCT OPTIONS)
+          ======================================================= */}
+      {isKnowledgeBaseOpen && (
+        <div 
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            width: "100vw",
+            height: "100vh",
+            backgroundColor: "rgba(0, 0, 0, 0.8)",
+            backdropFilter: "blur(5px)",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            zIndex: 10000
+          }}
+          onClick={() => setIsKnowledgeBaseOpen(false)}
+        >
+          <div 
+            style={{
+              backgroundColor: "#0f172a",
+              border: "1px solid #38bdf8",
+              borderRadius: "10px",
+              width: "680px",
+              maxWidth: "92vw",
+              maxHeight: "88vh",
+              padding: "24px",
+              boxShadow: "0 20px 45px rgba(0, 0, 0, 0.7)",
+              display: "flex",
+              flexDirection: "column",
+              gap: "16px",
+              color: "#f8fafc",
+              overflow: "hidden"
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #334155", paddingBottom: "12px" }}>
+              <h3 style={{ margin: 0, fontSize: "16px", color: "#38bdf8", display: "flex", alignItems: "center", gap: "8px" }}>
+                <span>📚</span> Ingest Knowledge Base into ChromaDB
+              </h3>
+              <button 
+                onClick={() => setIsKnowledgeBaseOpen(false)}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "#94a3b8",
+                  fontSize: "18px",
+                  cursor: "pointer"
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* 3 Modality Selection Option Buttons */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px" }}>
+              <button
+                onClick={() => { setKbTab("zip"); setKbMessage(null); }}
+                style={{
+                  padding: "10px",
+                  borderRadius: "6px",
+                  border: kbTab === "zip" ? "2px solid #38bdf8" : "1px solid #334155",
+                  background: kbTab === "zip" ? "#1e293b" : "#0f172a",
+                  color: kbTab === "zip" ? "#38bdf8" : "#94a3b8",
+                  fontWeight: "bold",
+                  fontSize: "12px",
+                  cursor: "pointer"
+                }}
+              >
+                📦 1. UI Images (ZIP)
+              </button>
+              <button
+                onClick={() => { setKbTab("doc"); setKbMessage(null); }}
+                style={{
+                  padding: "10px",
+                  borderRadius: "6px",
+                  border: kbTab === "doc" ? "2px solid #38bdf8" : "1px solid #334155",
+                  background: kbTab === "doc" ? "#1e293b" : "#0f172a",
+                  color: kbTab === "doc" ? "#38bdf8" : "#94a3b8",
+                  fontWeight: "bold",
+                  fontSize: "12px",
+                  cursor: "pointer"
+                }}
+              >
+                📄 2. PDF / Excel
+              </button>
+              <button
+                onClick={() => { setKbTab("github"); setKbMessage(null); }}
+                style={{
+                  padding: "10px",
+                  borderRadius: "6px",
+                  border: kbTab === "github" ? "2px solid #38bdf8" : "1px solid #334155",
+                  background: kbTab === "github" ? "#1e293b" : "#0f172a",
+                  color: kbTab === "github" ? "#38bdf8" : "#94a3b8",
+                  fontWeight: "bold",
+                  fontSize: "12px",
+                  cursor: "pointer"
+                }}
+              >
+                🐙 3. GitHub Repo
+              </button>
+            </div>
+
+            {/* Ingestion Panels */}
+            <div style={{ flex: 1, overflowY: "auto", display: "flex", flexDirection: "column", gap: "14px" }}>
+              
+              {/* OPTION 1: ZIP UPLOAD */}
+              {kbTab === "zip" && (
+                <div style={{ backgroundColor: "#1e293b", padding: "16px", borderRadius: "8px", border: "1px solid #334155" }}>
+                  <h4 style={{ margin: "0 0 8px 0", color: "#38bdf8", fontSize: "13px" }}>📦 Upload ZIP of UI Screenshots</h4>
+                  <p style={{ color: "#94a3b8", fontSize: "12px", margin: "0 0 14px 0", lineHeight: "1.4" }}>
+                    Select a <code>.zip</code> file containing UI images. Every image will automatically run through <strong>Step 1 to Step 7</strong> (SAM Layout, OCR, Color, DesignIR JSON, and Gemini Synthesis) and index in ChromaDB under <code>ui_components</code>.
+                  </p>
+                  
+                  <label style={{ display: "block", cursor: kbLoading ? "not-allowed" : "pointer", background: "#0f172a", padding: "14px", border: "1px dashed #38bdf8", borderRadius: "6px", textAlign: "center" }}>
+                    <input type="file" accept=".zip" onChange={handleZipUpload} disabled={kbLoading} style={{ display: "none" }} />
+                    <span style={{ color: "#38bdf8", fontSize: "12px", fontWeight: "bold" }}>
+                      {kbLoading ? "Processing ZIP Archive..." : "📁 Choose .zip archive file to Ingest"}
+                    </span>
+                  </label>
+                </div>
+              )}
+
+              {/* OPTION 2: PDF / EXCEL UPLOAD */}
+              {kbTab === "doc" && (
+                <div style={{ backgroundColor: "#1e293b", padding: "16px", borderRadius: "8px", border: "1px solid #334155" }}>
+                  <h4 style={{ margin: "0 0 8px 0", color: "#38bdf8", fontSize: "13px" }}>📄 Upload Design Specs (PDF, Excel, CSV)</h4>
+                  <p style={{ color: "#94a3b8", fontSize: "12px", margin: "0 0 14px 0", lineHeight: "1.4" }}>
+                    Extract text schemas, page guidelines, and spreadsheet metadata. Text is transformed into sentence embeddings and stored in ChromaDB under Category 2 (<code>documents_kb</code>).
+                  </p>
+
+                  <label style={{ display: "block", cursor: kbLoading ? "not-allowed" : "pointer", background: "#0f172a", padding: "14px", border: "1px dashed #38bdf8", borderRadius: "6px", textAlign: "center" }}>
+                    <input type="file" accept=".pdf,.xlsx,.xls,.csv" onChange={handleDocUpload} disabled={kbLoading} style={{ display: "none" }} />
+                    <span style={{ color: "#38bdf8", fontSize: "12px", fontWeight: "bold" }}>
+                      {kbLoading ? "Parsing Document..." : "📁 Upload PDF or Excel/CSV File"}
+                    </span>
+                  </label>
+                </div>
+              )}
+
+              {/* OPTION 3: GITHUB REPO LINK */}
+              {kbTab === "github" && (
+                <div style={{ backgroundColor: "#1e293b", padding: "16px", borderRadius: "8px", border: "1px solid #334155" }}>
+                  <h4 style={{ margin: "0 0 8px 0", color: "#38bdf8", fontSize: "13px" }}>🐙 Ingest GitHub Repository</h4>
+                  <p style={{ color: "#94a3b8", fontSize: "12px", margin: "0 0 14px 0", lineHeight: "1.4" }}>
+                    Clones any public GitHub repository, extracts source code files (<code>.dart</code>, <code>.html</code>, <code>.css</code>, <code>.js</code>, <code>.ts</code>, <code>.py</code>), computes code embeddings, and saves them to ChromaDB under Category 3 (<code>code_repo_kb</code>).
+                  </p>
+
+                  <form onSubmit={handleGithubIngest} style={{ display: "flex", gap: "8px" }}>
+                    <input 
+                      type="url"
+                      placeholder="https://github.com/username/repository.git"
+                      value={githubUrl}
+                      onChange={(e) => setGithubUrl(e.target.value)}
+                      disabled={kbLoading}
+                      style={{
+                        flex: 1,
+                        padding: "10px",
+                        background: "#0f172a",
+                        border: "1px solid #334155",
+                        borderRadius: "6px",
+                        color: "#ffffff",
+                        fontSize: "12px"
+                      }}
+                      required
+                    />
+                    <button
+                      type="submit"
+                      disabled={kbLoading}
+                      style={{
+                        padding: "10px 16px",
+                        background: "#0284c7",
+                        border: "none",
+                        borderRadius: "6px",
+                        color: "#ffffff",
+                        fontSize: "12px",
+                        fontWeight: "bold",
+                        cursor: kbLoading ? "not-allowed" : "pointer"
+                      }}
+                    >
+                      {kbLoading ? "Cloning..." : "Clone & Ingest"}
+                    </button>
+                  </form>
+                </div>
+              )}
+
+              {/* Status and Progress Message Box */}
+              {kbMessage && (
+                <div style={{
+                  padding: "12px",
+                  borderRadius: "6px",
+                  fontSize: "12px",
+                  lineHeight: "1.4",
+                  border: kbMessage.type === "error" ? "1px solid #ef4444" : kbMessage.type === "success" ? "1px solid #10b981" : "1px solid #38bdf8",
+                  backgroundColor: kbMessage.type === "error" ? "#7f1d1d40" : kbMessage.type === "success" ? "#064e3b40" : "#0c4a6e40",
+                  color: kbMessage.type === "error" ? "#fca5a5" : kbMessage.type === "success" ? "#6ee7b7" : "#7dd3fc"
+                }}>
+                  {kbMessage.text}
+                </div>
+              )}
+
+              {/* Quick Knowledge Base Summary */}
+              <div>
+                <span style={{ fontSize: "11px", color: "#f59e0b", fontWeight: "bold", display: "block", marginBottom: "6px" }}>
+                  CURRENT IN-MEMORY UI BLUEPRINT:
+                </span>
+                <pre style={{ 
+                  backgroundColor: "#020617", 
+                  padding: "12px", 
+                  borderRadius: "6px", 
+                  border: "1px solid #334155", 
+                  color: "#38bdf8", 
+                  fontFamily: "monospace", 
+                  fontSize: "11px", 
+                  maxHeight: "120px", 
+                  overflowY: "auto" 
+                }}>
+                  <code>{uiJsonOutput || "// No active UI screen in memory. Upload an image or ZIP to populate."}</code>
+                </pre>
+              </div>
+
+            </div>
+
+            {/* Footer */}
+            <div style={{ display: "flex", justifyContent: "flex-end", borderTop: "1px solid #334155", paddingTop: "12px" }}>
+              <button 
+                onClick={() => setIsKnowledgeBaseOpen(false)}
+                style={{
+                  backgroundColor: "#0284c7",
+                  color: "#ffffff",
+                  border: "none",
+                  borderRadius: "6px",
+                  padding: "8px 16px",
+                  fontSize: "12px",
+                  fontWeight: "bold",
+                  cursor: "pointer"
+                }}
+              >
+                Close Repository
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =======================================================
+          MODAL 2: SYNTHESIS ENGINE DETAILS POPUP MODAL
+          ======================================================= */}
+      {isEngineModalOpen && (
+        <div 
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            width: "100vw",
+            height: "100vh",
+            backgroundColor: "rgba(0, 0, 0, 0.75)",
+            backdropFilter: "blur(4px)",
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            zIndex: 9999
+          }}
+          onClick={() => setIsEngineModalOpen(false)}
+        >
+          <div 
+            style={{
+              backgroundColor: "#0f172a",
+              border: "1px solid #334155",
+              borderRadius: "10px",
+              width: "480px",
+              maxWidth: "90vw",
+              padding: "24px",
+              boxShadow: "0 20px 40px rgba(0, 0, 0, 0.6)",
+              display: "flex",
+              flexDirection: "column",
+              gap: "16px",
+              color: "#f8fafc"
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #334155", paddingBottom: "12px" }}>
+              <h3 style={{ margin: 0, fontSize: "16px", color: "#38bdf8", display: "flex", alignItems: "center", gap: "8px" }}>
+                <span>⚡</span> Synthesis Engine Telemetry
+              </h3>
+              <button 
+                onClick={() => setIsEngineModalOpen(false)}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "#94a3b8",
+                  fontSize: "18px",
+                  cursor: "pointer",
+                  lineHeight: "1"
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Engine Name */}
+            <div>
+              <span style={{ fontSize: "11px", color: "#94a3b8", textTransform: "uppercase", fontWeight: "bold" }}>
+                Selected Model Tier
+              </span>
+              <div style={{ 
+                marginTop: "6px",
+                padding: "8px 12px", 
+                backgroundColor: "#1e293b", 
+                borderRadius: "6px",
+                border: "1px solid #0284c7",
+                color: "#38bdf8",
+                fontWeight: "bold",
+                fontFamily: "monospace",
+                fontSize: "14px"
+              }}>
+                {selectedModelEngine}
+              </div>
+            </div>
+
+            {/* Context & Reasoning */}
+            <div>
+              <span style={{ fontSize: "11px", color: "#f59e0b", textTransform: "uppercase", fontWeight: "bold" }}>
+                Selection Reason & Routing Context
+              </span>
+              <div style={{ 
+                marginTop: "6px",
+                padding: "12px", 
+                backgroundColor: "#1e293b", 
+                borderRadius: "6px",
+                border: "1px solid #334155",
+                color: "#cbd5e1",
+                fontSize: "12px",
+                lineHeight: "1.6"
+              }}>
+                {modelSelectionReason}
+              </div>
+            </div>
+
+            {/* Modal Close Button */}
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "8px" }}>
+              <button 
+                onClick={() => setIsEngineModalOpen(false)}
+                style={{
+                  backgroundColor: "#0284c7",
+                  color: "#ffffff",
+                  border: "none",
+                  borderRadius: "6px",
+                  padding: "8px 16px",
+                  fontSize: "12px",
+                  fontWeight: "bold",
+                  cursor: "pointer"
+                }}
+              >
+                Close Window
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

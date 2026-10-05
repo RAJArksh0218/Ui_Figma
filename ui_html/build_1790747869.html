@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FirstKutAI Pipeline Studio</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+
+    body {
+      background-color: #1c1a21;
+      color: #e5e5e5;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* Component 4: Top Browser / Title Bar */
+    .top-bar {
+      background-color: #482d2a;
+      padding: 12px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .top-bar-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .window-dots {
+      display: flex;
+      gap: 6px;
+    }
+
+    .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+    }
+
+    .dot.red { background-color: #ff5f56; }
+    .dot.yellow { background-color: #ffbd2e; }
+    .dot.green { background-color: #27c93f; }
+
+    .session-info {
+      font-size: 13px;
+      font-weight: 500;
+      color: #fff;
+    }
+
+    .session-sub {
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.6);
+      margin-left: 10px;
+    }
+
+    /* Component 11: Settings Link */
+    .settings-link {
+      color: #7a5450;
+      font-size: 13px;
+      text-decoration: underline;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      transition: color 0.2s;
+    }
+
+    .settings-link:hover {
+      color: #a87974;
+    }
+
+    /* Main Grid System */
+    .main-workspace {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* Left Sidebar */
+    .sidebar {
+      width: 320px;
+      background-color: #14151c;
+      border-right: 1px solid rgba(255, 255, 255, 0.05);
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    /* Component 10: Control Panel Header */
+    .control-header {
+      background-color: #34384b;
+      color: #fff;
+      font-size: 11px;
+      font-weight: bold;
+      letter-spacing: 1px;
+      padding: 8px 12px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      text-align: center;
+    }
+
+    /* Component 3: Drag & Drop upload section */
+    .upload-zone {
+      flex: 1;
+      border: 2px dashed #34384b;
+      background-color: #1c1a21;
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      padding: 20px;
+      cursor: pointer;
+      transition: border-color 0.2s, background-color 0.2s;
+    }
+
+    .upload-zone:hover {
+      border-color: #96807c;
+      background-color: rgba(150, 128, 124, 0.05);
+    }
+
+    .upload-icon {
+      font-size: 40px;
+      color: #96807c;
+      margin-bottom: 12px;
+    }
+
+    .upload-text {
+      font-size: 14px;
+      color: #ffffff;
+      margin-bottom: 6px;
+      font-weight: 500;
+    }
+
+    .upload-subtext {
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.4);
+    }
+
+    /* Content Area */
+    .content-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background-color: #1c1a21;
+    }
+
+    /* Component 1: Telemetry & Log header */
+    .telemetry-header {
+      background-color: #2d2328;
+      padding: 20px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .telemetry-info h3 {
+      font-size: 16px;
+      color: #fff;
+      margin-bottom: 6px;
+    }
+
+    .telemetry-info p {
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.6);
+      font-family: 'Courier New', Courier, monospace;
+    }
+
+    /* Component 6: Status Indicator */
+    .status-indicator {
+      width: 32px;
+      height: 32px;
+      background-color: #96807c;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #14151c;
+      font-weight: bold;
+    }
+
+    /* Tabs Bar (Components 2, 8, 9) */
+    .tab-bar {
+      background-color: #14151c;
+      padding: 10px 20px;
+      display: flex;
+      gap: 10px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .tab {
+      padding: 8px 16px;
+      font-size: 12px;
+      font-weight: 500;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+
+    .tab.active {
+      background-color: #2f3345;
+      color: #fff;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+    }
+
+    .tab.secondary {
+      background-color: #303547;
+      color: #e5e5e5;
+    }
+
+    .tab.accent {
+      background-color: #1b151a;
+      color: #fff;
+    }
+
+    /* Central Canvas Area (Component 5) */
+    .canvas-container {
+      flex: 1;
+      padding: 40px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .error-card {
+      background-color: #090a0f;
+      border: 1px solid rgba(255, 95, 86, 0.2);
+      border-radius: 8px;
+      max-width: 600px;
+      padding: 40px;
+      text-align: center;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    }
+
+    .error-icon {
+      font-size: 48px;
+      color: #ff5f56;
+      margin-bottom: 20px;
+    }
+
+    .error-title {
+      font-size: 20px;
+      font-weight: bold;
+      color: #fff;
+      margin-bottom: 12px;
+    }
+
+    .error-message {
+      font-size: 14px;
+      line-color: 1.6;
+      color: rgba(255, 255, 255, 0.7);
+      margin-bottom: 24px;
+    }
+
+    .btn-action {
+      background-color: #482d2a;
+      color: #fff;
+      border: none;
+      padding: 12px 24px;
+      font-size: 14px;
+      font-weight: bold;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+
+    .btn-action:hover {
+      background-color: #5c3c39;
+    }
+
+    /* Component 0: White bottom telemetry strip */
+    .bottom-footer {
+      height: 48px;
+      background-color: #ffffff;
+      color: #1c1a21;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 20px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .footer-badges {
+      display: flex;
+      gap: 10px;
+    }
+
+    .badge {
+      background-color: #1c1a21;
+      color: #fff;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Bar -->
+  <header class="top-bar">
+    <div class="top-bar-left">
+      <div class="window-dots">
+        <span class="dot red"></span>
+        <span class="dot yellow"></span>
+        <span class="dot green"></span>
+      </div>
+      <span class="session-info">Google AI Studio</span>
+      <span class="session-sub">Unified Code Generation Studio | localhost:5173</span>
+    </div>
+    <!-- Component 11 -->
+    <a class="settings-link" href="#">
+      <span>⚙️</span> go to Settings
+    </a>
+  </header>
+
+  <!-- Main Grid Workspace -->
+  <main class="main-workspace">
+    <!-- Left Sidebar -->
+    <aside class="sidebar">
+      <!-- Component 10 -->
+      <div class="control-header">
+        SOURCE UI CONTROL PANEL
+      </div>
+
+      <!-- Component 3 -->
+      <div class="upload-zone">
+        <div class="upload-icon">📤</div>
+        <div class="upload-text">Click to Upload UI Screenshot</div>
+        <div class="upload-subtext">Drop image or layout files here</div>
+      </div>
+    </aside>
+
+    <!-- Main Workspace Content Area -->
+    <section class="content-area">
+      <!-- Component 1 & 6 -->
+      <div class="telemetry-header">
+        <div class="telemetry-info">
+          <h3>UI Image Parser & Compiler Workspace</h3>
+          <p>SYSTEM LOGS | PIPELINE LIVE TELEMETRY STREAM | Dart Code Copy</p>
+        </div>
+        <div class="status-indicator">⚡</div>
+      </div>
+
+      <!-- Tab selection bar -->
+      <div class="tab-bar">
+        <div class="tab active">SAM Segmentation</div>
+        <div class="tab secondary">Colors</div>
+        <div class="tab accent">Flutter Output</div>
+      </div>
+
+      <!-- Central Canvas with verification error message (Component 5) -->
+      <div class="canvas-container">
+        <div class="error-card">
+          <div class="error-icon">⚠️</div>
+          <h2 class="error-title">Code synthesis failed</h2>
+          <p class="error-message">All model tiers returned an error. Please verify your GEMINI API KEY inside your local environment configurations.</p>
+          <button class="btn-action">Verify Key Settings</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Component 0: Bottom Telemetry Strip -->
+  <footer class="bottom-footer">
+    <div>
+      Completed FirstKutAI Pipeline Integration
+    </div>
+    <div class="footer-badges">
+      <span class="badge">SAM 470495</span>
+      <span class="badge">OCR 213685</span>
+      <span class="badge">CLIP 0385</span>
+    </div>
+  </footer>
+
+</body>
+</html>

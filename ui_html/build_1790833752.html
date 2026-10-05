@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pickup Location Search</title>
+  <style>
+    :root {
+      --bg-root: #f7f7f8;
+      --bg-input: #f5f5f6;
+      --bg-bottom-bar: #fefefe;
+      --color-icon-placeholder: #e8eaec;
+      --accent-1: #e4e5e8;
+      --accent-2: #dcdee1;
+      --accent-3: #e1e3e6;
+      --accent-4: #e0e1e5;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    body {
+      background-color: #e0e0e2;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    /* Device frame helper simulating image dimensions [283 x 607] responsively */
+    .phone-container {
+      width: 320px;
+      height: 640px;
+      background-color: var(--bg-root);
+      border-radius: 32px;
+      box-shadow: 0 12px 24px rgba(0,0,0,0.15);
+      border: 8px solid #1a1a1c;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Top simulated status bar mapping to ID 1's top-left items */
+    .status-bar {
+      display: flex;
+      justify-content: space-between;
+      padding: 12px 20px 4px 20px;
+      font-size: 11px;
+      font-weight: bold;
+      color: #000;
+      background-color: var(--bg-input);
+    }
+
+    /* Search panel header mapping to ID 1 metadata */
+    .search-panel {
+      background-color: var(--bg-input);
+      padding: 8px 16px 16px 16px;
+      border-bottom-left-radius: 16px;
+      border-bottom-right-radius: 16px;
+    }
+
+    .header-row {
+      display: flex;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .back-btn {
+      font-size: 18px;
+      margin-right: 12px;
+      cursor: pointer;
+    }
+
+    .header-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: #111;
+    }
+
+    .input-field {
+      background-color: #fff;
+      border-radius: 8px;
+      padding: 10px 12px;
+      display: flex;
+      align-items: center;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+      margin-bottom: 10px;
+    }
+
+    .input-icon {
+      color: #999;
+      margin-right: 8px;
+      font-size: 14px;
+    }
+
+    .input-placeholder {
+      color: #888;
+      font-size: 13px;
+    }
+
+    .current-location-btn {
+      display: flex;
+      align-items: center;
+      color: #0076ff;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+
+    .current-location-btn::before {
+      content: "🎯";
+      margin-right: 5px;
+      font-size: 11px;
+    }
+
+    /* Main Scrollable Area */
+    .scrollable-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      padding-bottom: 85px; /* prevent bottom bar overlap */
+    }
+
+    .section-title {
+      font-size: 10px;
+      font-weight: bold;
+      color: #777;
+      letter-spacing: 0.5px;
+      margin-bottom: 12px;
+    }
+
+    /* Recent search row mapping components ID 4, 5, 6 and metadata labels */
+    .recent-item {
+      display: flex;
+      align-items: flex-start;
+      padding: 12px 0;
+      border-bottom: 1px solid #eee;
+    }
+
+    /* Container representation (ID 4, 5, 6) */
+    .icon-box {
+      width: 27px;
+      height: 27px;
+      background-color: var(--color-icon-placeholder);
+      border-radius: 6px;
+      margin-right: 12px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+    }
+
+    .item-details {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .item-header-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .item-title {
+      font-size: 13px;
+      font-weight: 500;
+      color: #222;
+    }
+
+    /* Colored accents from designIR ID 7, 8, 11 */
+    .item-badge-accent-1 {
+      width: 21px;
+      height: 5px;
+      background-color: var(--accent-4); /* ID 8 */
+      border-radius: 2px;
+    }
+
+    .item-badge-accent-2 {
+      width: 26px;
+      height: 7px;
+      background-color: var(--accent-1); /* ID 11 */
+      border-radius: 2px;
+    }
+
+    .item-badge-accent-3 {
+      width: 36px;
+      height: 7px;
+      background-color: var(--accent-3); /* ID 7 */
+      border-radius: 2px;
+    }
+
+    .item-subtitle {
+      font-size: 11px;
+      color: #666;
+      margin-top: 2px;
+    }
+
+    /* Simulated secondary text block representing ID 0 */
+    .metadata-block-text {
+      font-size: 9px;
+      color: #aaa;
+      line-height: 1.4;
+      margin-top: 16px;
+      padding: 0 4px;
+    }
+
+    /* Bottom Bar representation (ID 2 container: bottom 529, height 75) */
+    .bottom-bar {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 75px;
+      background-color: var(--bg-bottom-bar);
+      border-top: 1px solid #ececec;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      box-shadow: 0 -3px 10px rgba(0,0,0,0.04);
+    }
+
+    .map-action-info {
+      display: flex;
+      align-items: center;
+    }
+
+    .map-icon {
+      font-size: 18px;
+      margin-right: 8px;
+    }
+
+    .map-text {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .map-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: #111;
+    }
+
+    .map-subtitle {
+      font-size: 10px;
+      color: #888;
+    }
+
+    .btn-confirm {
+      background-color: #1a1a1c;
+      color: #fff;
+      font-size: 12px;
+      font-weight: bold;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    .btn-confirm:hover {
+      background-color: #333;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Responsive Device Container representing layout -->
+  <div class="phone-container">
+    <!-- Status Bar Area -->
+    <div class="status-bar">
+      <span>9:41</span>
+      <span>📶 🔋</span>
+    </div>
+
+    <!-- Search Header & Action Inputs (ID 1 Area) -->
+    <div class="search-panel">
+      <div class="header-row">
+        <span class="back-btn">←</span>
+        <span class="header-title">Pickup Location</span>
+      </div>
+      <div class="input-field">
+        <span class="input-icon">🔍</span>
+        <span class="input-placeholder">Search for location</span>
+      </div>
+      <div class="current-location-btn">
+        Current Location
+      </div>
+    </div>
+
+    <!-- Content List containing recent searches mapping to ID 4, 5, 6, 7, 8, 9, 10, 11 -->
+    <div class="scrollable-content">
+      <div class="section-title">RECENT SEARCHES</div>
+
+      <!-- Item 1 with ID 4 icon container & ID 8 badge accent -->
+      <div class="recent-item">
+        <div class="icon-box">🕒</div>
+        <div class="item-details">
+          <div class="item-header-row">
+            <span class="item-title">Secunderabad</span>
+            <span class="item-badge-accent-1"></span>
+          </div>
+          <span class="item-subtitle">Tech Mahendra Office, Hyd</span>
+        </div>
+      </div>
+
+      <!-- Item 2 with ID 5 icon container & ID 11 badge accent -->
+      <div class="recent-item">
+        <div class="icon-box">🕒</div>
+        <div class="item-details">
+          <div class="item-header-row">
+            <span class="item-title">Sth Block Road No 14</span>
+            <span class="item-badge-accent-2"></span>
+          </div>
+          <span class="item-subtitle">Hyderabad, Telangana</span>
+        </div>
+      </div>
+
+      <!-- Item 3 with ID 6 icon container & ID 7 badge accent -->
+      <div class="recent-item">
+        <div class="icon-box">🏠</div>
+        <div class="item-details">
+          <div class="item-header-row">
+            <span class="item-title">Kukatpally Main Junction</span>
+            <span class="item-badge-accent-3"></span>
+          </div>
+          <span class="item-subtitle">Block 7, Kukatpally, Hyd</span>
+        </div>
+      </div>
+
+      <!-- Metadata secondary raw content represented beautifully (ID 0 text mockup) -->
+      <div class="metadata-block-text">
+        Loculc Cn location 22 km 2.6 KI 20 FTI 47/731/A plocx 7, Kukatpally Main Jinction Hy 4k rydclabud Bekm Hop Pinjo
+      </div>
+    </div>
+
+    <!-- Bottom Actions Container (ID 2 element area) -->
+    <div class="bottom-bar">
+      <div class="map-action-info">
+        <span class="map-icon">🗺️</span>
+        <div class="map-text">
+          <span class="map-title">Set location on map</span>
+          <span class="map-subtitle">Drag and pin location</span>
+        </div>
+      </div>
+      <button class="btn-confirm">Confirm</button>
+    </div>
+  </div>
+
+</body>
+</html>

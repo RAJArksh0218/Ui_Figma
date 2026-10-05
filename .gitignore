@@ -28,3 +28,10 @@ frontend/build/
 # IDE files
 .vscode/
 .DS_Store
+node_modules/
+venv/
+.env
+*.pth
+*.bin
+ui_vector_db/
+ui_vector_db_old/

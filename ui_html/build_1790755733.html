@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Set Pickup Location</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts & Icons -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #f3f4f6;
+    }
+    .phone-container {
+      width: 375px;
+      height: 812px;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    }
+    .map-bg-1 { background-color: #dde2e7; }
+    .map-bg-2 { background-color: #dae1e7; }
+    .map-path-3 { background-color: #e4e4dc; }
+    .map-path-4 { background-color: #eaebee; }
+  </style>
+</head>
+<body class="flex items-center justify-center min-h-screen p-4">
+
+  <!-- Main Mobile Shell Container -->
+  <div class="phone-container bg-slate-100 rounded-[40px] border-[8px] border-slate-800 flex flex-col justify-between">
+    
+    <!-- Abstract Map Background layers (Hierarchical absolute simulation) -->
+    <div class="absolute inset-0 z-0 overflow-hidden rounded-[32px]">
+      <div class="absolute inset-0 map-bg-1"></div>
+      <div class="absolute top-0 left-0 w-2/3 h-full map-bg-2"></div>
+      <div class="absolute top-[126px] left-[81px] w-[160px] h-[368px] rounded-2xl map-path-3"></div>
+      <div class="absolute top-[126px] left-0 w-[81px] h-[15px] map-path-4"></div>
+
+      <!-- Center Location Pin Marker (id: 8 mockup) -->
+      <div class="absolute top-[40%] left-[30%] transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center">
+        <div class="bg-[#cce0d4] text-[#2e5b3d] text-[10px] font-bold px-2 py-1 rounded shadow-md mb-1 whitespace-nowrap animate-bounce">
+          Meet here
+        </div>
+        <span class="material-icons text-[#1655ba] text-4xl filter drop-shadow-md">location_on</span>
+      </div>
+    </div>
+
+    <!-- Header Panel (id: 5 Search Box area) -->
+    <div class="absolute top-0 left-0 right-0 z-10 p-4 bg-[#f6f7f8]/95 backdrop-blur-sm rounded-b-2xl shadow-md border-b border-gray-200">
+      <div class="flex items-center gap-3 mb-3">
+        <button class="p-1 hover:bg-gray-200 rounded-full transition-colors">
+          <span class="material-icons text-gray-700 text-lg">arrow_back</span>
+        </button>
+        <span class="text-sm font-bold text-gray-800">Set Pickup Location</span>
+      </div>
+      <div class="flex items-center bg-white border border-gray-200 rounded-lg px-3 py-2 shadow-sm">
+        <span class="material-icons text-gray-400 text-sm mr-2">search</span>
+        <input type="text" placeholder="Search location" class="w-full text-xs text-gray-700 focus:outline-none bg-transparent">
+      </div>
+    </div>
+
+    <!-- Bottom Location Detail Card (id: 3 address panel) -->
+    <div class="absolute bottom-0 left-0 right-0 z-10 bg-white rounded-t-3xl shadow-[0_-8px_20px_rgba(0,0,0,0.1)] p-5 flex flex-col gap-4 border-t border-gray-100">
+      
+      <!-- Pull Bar Indicator -->
+      <div class="w-10 h-1 bg-gray-300 rounded-full mx-auto -mt-2 mb-1"></div>
+
+      <div class="flex gap-3">
+        <!-- Location Icon Container (id: 9) -->
+        <div class="w-9 h-9 rounded-lg bg-[#e1eaf9] flex items-center justify-center flex-shrink-0">
+          <span class="material-icons text-[#1655ba] text-lg">location_on</span>
+        </div>
+        <!-- Address Text -->
+        <div class="flex flex-col">
+          <span class="text-[9px] font-bold tracking-wider text-[#1655ba]">SELECTED LOCATION</span>
+          <p class="text-[12px] text-gray-800 font-semibold mt-0.5 leading-relaxed">
+            47/333/A Block 7, Kukatpally: Main Junction Hyderabad
+          </p>
+        </div>
+      </div>
+
+      <!-- Action Button (id: 0 Confirm Location) -->
+      <button class="w-full bg-[#1655ba] hover:bg-[#124496] text-white text-sm font-bold py-3 rounded-xl shadow-lg transition-transform active:scale-[0.98]">
+        Confirm Location
+      </button>
+    </div>
+
+  </div>
+
+</body>
+</html>
